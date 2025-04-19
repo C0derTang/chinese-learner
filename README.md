@@ -2,6 +2,8 @@
 
 This is an interactive tool for analyzing Chinese characters, providing features like pinyin generation, character meanings, OCR (Optical Character Recognition), and flashcards for learning.
 
+Shamelessly vibe coded with Claude 3.5 Sonnet
+
 ## Features
 
 - Text Analysis
@@ -63,6 +65,7 @@ streamlit run app.py
 - Shuffle cards for randomized practice
 - Toggle answers to check meanings and compounds
 - Track progress with the progress bar
+
 
 ## File Structure
 
