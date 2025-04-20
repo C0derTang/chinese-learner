@@ -24,4 +24,5 @@ ENV/
 .vscode/
 .idea/
 chars.json
-cedict_ts.u8 
+cedict_ts.u8
+character_lists.json 

@@ -5,6 +5,10 @@ from pypinyin import pinyin, Style
 from PIL import Image
 import pytesseract
 import random
+from character_lists import (
+    load_character_lists, add_to_list, remove_from_list,
+    create_list, delete_list, get_characters_in_list, get_all_lists
+)
 
 # Configure pytesseract to use the installed Tesseract executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -34,6 +38,23 @@ def initialize_flashcard_state():
         chars_dict = load_chars_json()
         st.session_state.flashcard_chars = [(char, info) for char, info in chars_dict.items()]
         random.shuffle(st.session_state.flashcard_chars)  # Shuffle initially
+    if 'selected_list' not in st.session_state:
+        st.session_state.selected_list = "All Characters"
+    if 'new_list_name' not in st.session_state:
+        st.session_state.new_list_name = ""
+
+def filter_flashcards_by_list(list_name: str):
+    """Filter flashcards based on selected list"""
+    chars_dict = load_chars_json()
+    if list_name == "All Characters":
+        st.session_state.flashcard_chars = [(char, info) for char, info in chars_dict.items()]
+    else:
+        char_set = get_characters_in_list(list_name)
+        st.session_state.flashcard_chars = [(char, info) for char, info in chars_dict.items() if char in char_set]
+    if st.session_state.flashcard_chars:
+        random.shuffle(st.session_state.flashcard_chars)
+        st.session_state.current_char_index = 0
+        st.session_state.show_answer = False
 
 def next_flashcard():
     st.session_state.current_char_index = (st.session_state.current_char_index + 1) % len(st.session_state.flashcard_chars)
@@ -59,7 +80,7 @@ def main():
     initialize_flashcard_state()
 
     # Create tabs for different sections
-    main_tab1, main_tab2 = st.tabs(["Text Analysis", "Flashcards"])
+    main_tab1, main_tab2, main_tab3 = st.tabs(["Text Analysis", "Flashcards", "Character Lists"])
 
     with main_tab1:
         # Create tabs for input methods
@@ -134,7 +155,19 @@ def main():
 
     with main_tab2:
         if st.session_state.flashcard_chars:
-            st.write("Practice with all available Chinese characters!")
+            # Add list selection dropdown
+            all_lists = ["All Characters"] + get_all_lists()
+            selected_list = st.selectbox(
+                "Select Character List",
+                all_lists,
+                index=all_lists.index(st.session_state.selected_list)
+            )
+            
+            if selected_list != st.session_state.selected_list:
+                st.session_state.selected_list = selected_list
+                filter_flashcards_by_list(selected_list)
+
+            st.write(f"Practice with characters from: {selected_list}")
             
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
@@ -158,6 +191,22 @@ def main():
                     """,
                     unsafe_allow_html=True
                 )
+
+            # Add favorite/list management buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                available_lists = get_all_lists()
+                selected_list_to_add = st.selectbox("Add to list:", available_lists, key="add_to_list")
+                if st.button("Add to Selected List"):
+                    add_to_list(selected_list_to_add, current_char)
+                    st.success(f"Added {current_char} to {selected_list_to_add}")
+            
+            with col2:
+                if st.session_state.selected_list != "All Characters":
+                    if st.button("Remove from Current List"):
+                        remove_from_list(st.session_state.selected_list, current_char)
+                        filter_flashcards_by_list(st.session_state.selected_list)
+                        st.success(f"Removed {current_char} from {st.session_state.selected_list}")
 
             # Toggle answer button
             st.button("Show/Hide Answer", on_click=toggle_answer)
@@ -202,10 +251,61 @@ def main():
                                 )
 
             # Show progress
-            st.progress((st.session_state.current_char_index + 1) / len(st.session_state.flashcard_chars))
-            st.write(f"Card {st.session_state.current_char_index + 1} of {len(st.session_state.flashcard_chars)}")
+            total_cards = len(st.session_state.flashcard_chars)
+            st.progress((st.session_state.current_char_index + 1) / total_cards)
+            st.write(f"Card {st.session_state.current_char_index + 1} of {total_cards}")
         else:
-            st.error("No characters loaded. Please check the characters JSON file.")
+            if st.session_state.selected_list == "All Characters":
+                st.error("No characters loaded. Please check the characters JSON file.")
+            else:
+                st.warning(f"No characters in the selected list: {st.session_state.selected_list}")
+    
+    with main_tab3:
+        st.subheader("Manage Character Lists")
+        
+        # Create new list
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            new_list_name = st.text_input("New list name:", key="new_list_input")
+        with col2:
+            if st.button("Create List") and new_list_name:
+                create_list(new_list_name)
+                st.success(f"Created new list: {new_list_name}")
+        
+        # Display existing lists
+        st.subheader("Existing Lists")
+        for list_name in get_all_lists():
+            with st.expander(f"{list_name} ({len(get_characters_in_list(list_name))} characters)"):
+                chars = get_characters_in_list(list_name)
+                if chars:
+                    # Display characters in a grid with remove buttons
+                    for i in range(0, len(chars), 4):  # Show 4 characters per row
+                        cols = st.columns(4)
+                        for j, char in enumerate(sorted(chars)[i:i+4]):
+                            with cols[j]:
+                                # Create a container for each character
+                                st.markdown(
+                                    f"""
+                                    <div style='text-align: center; padding: 10px; border: 1px solid #e0e0e0; border-radius: 5px;'>
+                                        <h3 style='margin: 0;'>{char}</h3>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
+                                # Add remove button for each character
+                                if st.button(f"Remove {char}", key=f"remove_{list_name}_{char}"):
+                                    remove_from_list(list_name, char)
+                                    st.success(f"Removed {char} from {list_name}")
+                                    st.rerun()
+                    
+                    if list_name != "Favorites":  # Prevent deletion of Favorites list
+                        st.markdown("<hr>", unsafe_allow_html=True)
+                        if st.button(f"Delete List: {list_name}"):
+                            delete_list(list_name)
+                            st.success(f"Deleted list: {list_name}")
+                            st.rerun()
+                else:
+                    st.info("No characters in this list yet.")
 
 if __name__ == "__main__":
     main() 
